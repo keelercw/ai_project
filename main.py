@@ -22,36 +22,44 @@ def main():
         raise RuntimeError("GEMINI_API_KEY environment variable not set")
 
     client = genai.Client(api_key=api_key)
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=messages,
-        config=types.GenerateContentConfig(tools=[available_functions], system_instruction=system_prompt)
-    )
-    if not response.usage_metadata:
-        raise RuntimeError("Gemini API response appears to be malformed")
-    
-    function_results = []
-    
-    if args.verbose:
-        print(f"User prompt: {args.user_prompt}")
-        print("Prompt tokens:", response.usage_metadata.prompt_token_count)
-        print("Response tokens:", response.usage_metadata.candidates_token_count)   
+    for _ in range(20):
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=messages,
+            config=types.GenerateContentConfig(tools=[available_functions], system_instruction=system_prompt)
+        )
+        if not response.usage_metadata:
+            raise RuntimeError("Gemini API response appears to be malformed")
+        for content in response.candidates:
+            messages.append(content.content)
 
-    if response.function_calls is None:        
-        print("Response:")
-        print(response.text)
-    else:
-        for function_call in response.function_calls:
-            function_call_result = call_function(function_call, verbose = args.verbose)
-            if not function_call_result.parts:
-                raise Exception("Parts List is empty")
-            if function_call_result.parts[0].function_response is None:
-                raise Exception("There is no FunctionResponse")
-            if function_call_result.parts[0].function_response.response is None:
-                raise Exception("No response Field")
-            function_results.append(function_call_result.parts[0])
-            if args.verbose:
-                print(f"-> {function_call_result.parts[0].function_response.response}")
+    
+        function_results = []
+    
+        if args.verbose:
+            print(f"User prompt: {args.user_prompt}")
+            print("Prompt tokens:", response.usage_metadata.prompt_token_count)
+            print("Response tokens:", response.usage_metadata.candidates_token_count)   
+
+        if response.function_calls is None:        
+            print("Response:")
+            print(response.text)
+            return
+        else:
+            for function_call in response.function_calls:
+                function_call_result = call_function(function_call, verbose = args.verbose)
+                if not function_call_result.parts:
+                    raise Exception("Parts List is empty")
+                if function_call_result.parts[0].function_response is None:
+                    raise Exception("There is no FunctionResponse")
+                if function_call_result.parts[0].function_response.response is None:
+                    raise Exception("No response Field")
+                function_results.append(function_call_result.parts[0])
+                if args.verbose:
+                    print(f"-> {function_call_result.parts[0].function_response.response}")
+            messages.append(types.Content(role="user", parts=function_results))
+    print("Maximum iterations reached")
+    exit(1)
             
 
 
